@@ -17,6 +17,26 @@ import torchvision.transforms as T
 import PIL
 import cv2 as cv
 
+
+# hyperparameters
+num_target_update = 0 # base: 0
+current_step = 0 # base: 0
+startpoint = 50000 # base: 50000
+endpoint = 1000000 # base: 1000000
+kneepoint = 1000000 # base: 1000000
+start = 1 # base: 1
+end = .1 # base: 0.1
+final_eps = 0.01 # base: 0.01
+final_knee_point = 22000000 # base: 22000000
+action_repeat = 4 # base: 4
+batch_size = 128 # base: 128
+replay_start_size = 50000 # base: 50000
+gamma = 1 # base: 1
+max_iteration = 500000 # base: 500000
+max_frames = 22000000 # base: 22000000
+target_update = 2500 # base:  2500
+learning_rate=0.0000625 # base: 0.0000625
+
 Eco_Experience = namedtuple(
     'Eco_Experience',
     ('state', 'action', 'reward')
@@ -299,6 +319,7 @@ def plot(values, moving_avg_period):
 
     # plt.figure()
     plt.clf()
+    plt.ylim(0, 300)
     plt.title('Training...')
     plt.xlabel('Episode')
     plt.ylabel('Reward')
@@ -320,7 +341,7 @@ target_net = DQN(num_classes = env.env.action_space.n).to(device)
 
 target_net.load_state_dict(policy_net.state_dict())
 target_net.eval()
-optimizer = optim.Adam(policy_net.parameters(), lr=0.0000625)
+optimizer = optim.Adam(policy_net.parameters(), lr=learning_rate)
 criterion = torch.nn.SmoothL1Loss()
 
 tracker_dict = {}
@@ -338,22 +359,8 @@ tracker_dict["best_reward"] = 0
  
 plt.figure()
 t1, t2 = time.time(), time.time()
-num_target_update = 0
-current_step = 0
-startpoint = 50000
-endpoint = 1000000
-kneepoint = 1000000
-start = 1
-end = .1
-final_eps = 0.01
-final_knee_point = 22000000
-action_repeat = 4
-batch_size = 128
-replay_start_size = 50000
-gamma = .5 # changed this, was .99
-max_iteration = 500000
-max_frames = 22000000
-target_update = 2500
+
+
 def get_exploration_rate(current_step):
     if(current_step < startpoint):
         return 1
@@ -454,9 +461,9 @@ for episode in range(10000):
 env.env.close_video_recorder()
 env.close()
 plt.figure()
-plt.plot(tracker_dict["loss_hist"])
-plt.title("loss")
-plt.xlabel("iterations")
+plt.plot(tracker_dict["rewards_hist"])
+plt.title("reward")
+plt.xlabel("episodes")
 plt.savefig("loss.jpg")
 with open("tracker_dict.txt", "w") as file:
     file.write(str(tracker_dict["eval_model_list_txt"]))
