@@ -431,10 +431,11 @@ def single_episode():
 def all_episodes(trial):
     
     batch_size = trial.suggest_int('batch_size', 32, 128)
-    # startpoint = trial.suggest_int('startpoint', 0, 100000)
+    startpoint = trial.suggest_int('startpoint', 0, 100000)
     start = trial.suggest_float('start', 0, 1.5)
     learning_rate = trial.suggest_float('learning_rate', 0.0000625, 0.0001)
-    for episode in range(3000):
+    gamma = trial.suggest_float('gamma', 0.5, 2)
+    for episode in range(5000):
         print(episode)
         tol_reward = single_episode()
     tracker_dict["minibatch_updates_counter"] = 1
@@ -449,8 +450,8 @@ def all_episodes(trial):
     tracker_dict["best_frame_for_gif"] = []
     tracker_dict["best_reward"] = 0
     return tol_reward
-study = optuna.create_study(direction='maximize')
-study.optimize(all_episodes, n_trials=10)
+study = optuna.create_study(storage="sqlite:///db.sqlite3", direction='maximize')
+study.optimize(all_episodes, n_trials=100)
 print(study.best_params)
 env.env.close_video_recorder()
 env.close()
