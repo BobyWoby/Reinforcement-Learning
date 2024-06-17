@@ -1,22 +1,14 @@
 import time
 import gymnasium as gym
-from gymnasium.wrappers import frame_stack, atari_preprocessing
-import math
 import random
-import matplotlib
 import numpy as np
 import matplotlib.pyplot as plt
-from collections import namedtuple, deque
-from itertools import count
+from collections import namedtuple
 import torch
 import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-from IPython import display
+import torch.optim as optim 
 import torchvision.transforms as T
-import PIL
-import cv2 as cv
-
+import optuna
 
 # hyperparameters
 num_target_update = 0 # base: 0
@@ -24,12 +16,12 @@ current_step = 0 # base: 0
 startpoint = 50000 # base: 50000
 endpoint = 1000000 # base: 1000000
 kneepoint = 1000000 # base: 1000000
-start = 1 # base: 1
+start = .5 # base: 1
 end = .1 # base: 0.1
 final_eps = 0.01 # base: 0.01
 final_knee_point = 22000000 # base: 22000000
 action_repeat = 4 # base: 4
-batch_size = 128 # base: 128
+batch_size = 32 # base: 32
 replay_start_size = 50000 # base: 50000
 gamma = 1 # base: 1
 max_iteration = 500000 # base: 500000
@@ -45,7 +37,7 @@ Experience = namedtuple(
     'Experience',
     ('state', 'action', 'next_state', 'reward')
 )
-class ReplayMemory_economy():
+class ReplayMemory():
     # save one state per experience to improve memory size
     def __init__(self, capacity):
         self.capacity = capacity
@@ -55,21 +47,16 @@ class ReplayMemory_economy():
 
     def push(self, experience):
         state = (experience.state * 255).type(self.dtype).cpu()
-        # next_state = (experience.next_state * 255).type(self.dtype)
         new_experience = Eco_Experience(state,experience.action,experience.reward)
 
         if len(self.memory) < self.capacity:
             self.memory.append(new_experience)
         else:
             self.memory[self.push_count % self.capacity] = new_experience
-        # print(id(experience))
-        # print(id(self.memory[0]))
         self.push_count += 1
 
     def sample(self, batch_size):
-        # randomly sample experiences
         experience_index = np.random.randint(3, len(self.memory)-1, size = batch_size)
-        # memory_arr = np.array(self.memory)
         experiences = []
         for index in experience_index:
             if self.push_count > self.capacity:
@@ -79,7 +66,6 @@ class ReplayMemory_economy():
                 state = torch.stack(([self.memory[np.max(index+j, 0)].state for j in range(-3,1)])).unsqueeze(0)
                 next_state = torch.stack(([self.memory[np.max(index+1+j, 0)].state for j in range(-3,1)])).unsqueeze(0)
             experiences.append(Experience(state.float().cuda()/255, self.memory[index].action, next_state.float().cuda()/255, self.memory[index].reward))
-        # return random.sample(self.memory, batch_size)
         return experiences
 
     def can_provide_sample(self, batch_size, replay_start_size):
@@ -104,7 +90,6 @@ class DQN(nn.Module):
         if init_weights:
             self._initialize_weights()
     def forward(self, x):
-        # breakpoint()
         x = self.cnn(x)
         x = torch.flatten(x, start_dim=1)
         x = self.classifier(x)
@@ -123,22 +108,29 @@ class DQN(nn.Module):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
                 nn.init.constant_(m.bias, 0.0)
 
+tracker_dict = {}
+tracker_dict["minibatch_updates_counter"] = 1
+tracker_dict["actions_counter"] = 1
+tracker_dict["running_reward"] = 0
+tracker_dict["rewards_hist"] = []
+tracker_dict["loss_hist"] = []
+tracker_dict["eval_model_list_txt"] = []
+tracker_dict["rewards_hist_update_axis"] = []
+# only used in evaluation script
+tracker_dict["eval_reward_list"] = []
+tracker_dict["best_frame_for_gif"] = []
+tracker_dict["best_reward"] = 0
 class AtariEnvManager():
     def __init__(self, device, game_env, is_use_additional_ending_criterion):
-        "avaliable game env: PongDeterministic-v4, BreakoutDeterministic-v4"
         self.device = device
         self.game_env = game_env
-        # PongDeterministic-v4
-        # breakpoint()
         self.env = gym.make(game_env, render_mode="rgb_array").unwrapped
         self.env = gym.wrappers.RecordVideo(env=self.env, video_folder="videos", name_prefix="Breakout", video_length=0, episode_trigger=lambda x: x % 100 == 0)
-        # self.env = gym.make(game_env, render_mode="human").unwrapped
-        # self.env = gym.make('BreakoutDeterministic-v4').unwrapped #BZX: v4 automatically return skipped screens
         self.env.reset()
         self.current_screen = None
         self.done = False
-        # BZX: running_K: stacked K images together to present a state
-        # BZx: running_queue: maintain the latest running_K images
+        # running_K: stacked K images together to present a state
+        # running_queue: maintain the latest running_K images
         self.running_K = 4
         self.running_queue = []
         self.is_additional_ending = False # This may change to True along the game. 2 possible reason: loss of lives; negative reward.
@@ -148,9 +140,8 @@ class AtariEnvManager():
     def reset(self):
         self.env.reset()
         self.current_screen = None
-        self.running_queue = [] #BZX: clear the state
+        self.running_queue = [] # clear the state
         self.is_additional_ending = False
-        # self.current_lives = 5
 
     def close(self):
         self.env.close()
@@ -166,8 +157,6 @@ class AtariEnvManager():
 
     def take_action(self, action):
         _, reward, self.done, _, lives = self.env.step(action.item())
-        # breakpoint()
-        # for Pong: lives is always 0.0, so self.is_additional_ending will always be false
         if self.is_use_additional_ending_criterion:
             self.is_additonal_ending_criterion_met(lives,reward)
         return torch.tensor([reward], device=self.device)
@@ -188,7 +177,6 @@ class AtariEnvManager():
             self.running_queue.append(black_screen)
 
     def get_state(self):
-        # breakpoint()
         if self.just_starting():
             self.init_running_queue()
         elif self.done or self.is_additional_ending:
@@ -309,6 +297,7 @@ def plot(values, moving_avg_period):
     :param moving_avg_period:
     :return: None
     """
+        # breakpoint()
     # Convert values to tensor if it's not already a tensor
     if not isinstance(values, torch.Tensor):
         values = torch.tensor(values)
@@ -319,7 +308,7 @@ def plot(values, moving_avg_period):
 
     # plt.figure()
     plt.clf()
-    plt.ylim(0, 300)
+    plt.ylim(0, 100)
     plt.title('Training...')
     plt.xlabel('Episode')
     plt.ylabel('Reward')
@@ -328,14 +317,12 @@ def plot(values, moving_avg_period):
     plt.plot(moving_avg)
     print("Episode", len(values), "\n",moving_avg_period, "episode moving avg:", moving_avg[-1])
     plt.pause(0.0005)
-    # plt.show()
-    # if is_ipython: display.clear_output(wait=True)
     return moving_avg[-1]
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 env = AtariEnvManager(device, "BreakoutDeterministic-v4", is_use_additional_ending_criterion=True)
 
-memory = ReplayMemory_economy(1000000)
+memory = ReplayMemory(1000000)
 policy_net = DQN(num_classes = env.env.action_space.n).to(device)
 target_net = DQN(num_classes = env.env.action_space.n).to(device)
 
@@ -344,18 +331,6 @@ target_net.eval()
 optimizer = optim.Adam(policy_net.parameters(), lr=learning_rate)
 criterion = torch.nn.SmoothL1Loss()
 
-tracker_dict = {}
-tracker_dict["minibatch_updates_counter"] = 1
-tracker_dict["actions_counter"] = 1
-tracker_dict["running_reward"] = 0
-tracker_dict["rewards_hist"] = []
-tracker_dict["loss_hist"] = []
-tracker_dict["eval_model_list_txt"] = []
-tracker_dict["rewards_hist_update_axis"] = []
-# only used in evaluation script
-tracker_dict["eval_reward_list"] = []
-tracker_dict["best_frame_for_gif"] = []
-tracker_dict["best_reward"] = 0
  
 plt.figure()
 t1, t2 = time.time(), time.time()
@@ -388,16 +363,11 @@ def select_action(state, policy_net):
 # surface = pygame.display.set_mode((160, 210), pygame.DOUBLEBUF)
 frames = []
 env.env.start_video_recorder()
-for episode in range(10000):
+def single_episode():
     env.reset()
     state = env.get_state()
     tol_reward = 0
     while(1):
-        # if(episode > 2000 or episode == 0):
-        #     # im = PIL.Image.fromarray(env.render())
-        #     # drawer = PIL.ImageDraw.Draw(im)
-        #     # drawer.text((0,0), str(tracker_dict["running_reward"]), fill=(255,255,255))
-        #     frames.append(env.render())
         
         action = select_action(state, policy_net)
         reward = env.take_action(action)
@@ -410,7 +380,6 @@ for episode in range(10000):
         
         if(current_step % action_repeat == 0) and \
             memory.can_provide_sample(batch_size, replay_start_size):
-            # breakpoint()
             experiences = memory.sample(batch_size)
             batch = Experience(*zip(*experiences))
             states = torch.cat(batch.state) 
@@ -420,7 +389,6 @@ for episode in range(10000):
             if(len(states.shape) != 4 or len(next_states.shape) != 4):
                 print("state shape = ", states.shape)
                 print("next_state shape = ", next_states.shape)
-                breakpoint()
             current_q_values = get_current(policy_net, states, actions)
             next_q_values = DQN_get_next(target_net, next_states)
             target_q_values = (next_q_values * gamma) + rewards
@@ -451,13 +419,39 @@ for episode in range(10000):
                 tracker_dict["eval_model_list_txt"].append("policy_net.pth")
             
         if env.done:
+            
             tracker_dict["rewards_hist"].append(tol_reward)
             tracker_dict["rewards_hist_update_axis"].append(tracker_dict["actions_counter"])
             tracker_dict["running_reward"] = plot(tracker_dict["rewards_hist"], 100)
-            # if(episode > 2000 or episode == 0):
-            #     cv.VideoWriter("Breakout.mp4", cv.VideoWriter_fourcc(*'mp4v'), 30, (160, 210)).write(np.array(frames))
-            #     frames = []
-            break
+            return tol_reward
+            # break
+            
+
+    
+def all_episodes(trial):
+    
+    batch_size = trial.suggest_int('batch_size', 32, 128)
+    # startpoint = trial.suggest_int('startpoint', 0, 100000)
+    start = trial.suggest_float('start', 0, 1.5)
+    learning_rate = trial.suggest_float('learning_rate', 0.0000625, 0.0001)
+    for episode in range(3000):
+        print(episode)
+        tol_reward = single_episode()
+    tracker_dict["minibatch_updates_counter"] = 1
+    tracker_dict["actions_counter"] = 1
+    tracker_dict["running_reward"] = 0
+    tracker_dict["rewards_hist"] = []
+    tracker_dict["loss_hist"] = []
+    tracker_dict["eval_model_list_txt"] = []
+    tracker_dict["rewards_hist_update_axis"] = []
+    # only used in evaluation script
+    tracker_dict["eval_reward_list"] = []
+    tracker_dict["best_frame_for_gif"] = []
+    tracker_dict["best_reward"] = 0
+    return tol_reward
+study = optuna.create_study(direction='maximize')
+study.optimize(all_episodes, n_trials=10)
+print(study.best_params)
 env.env.close_video_recorder()
 env.close()
 plt.figure()
