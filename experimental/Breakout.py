@@ -333,6 +333,7 @@ criterion = torch.nn.SmoothL1Loss()
 
  
 plt.figure()
+global t1, t2
 t1, t2 = time.time(), time.time()
 
 
@@ -364,6 +365,7 @@ def select_action(state, policy_net):
 frames = []
 env.env.start_video_recorder()
 def single_episode():
+    global num_target_update, current_step, startpoint, endpoint, kneepoint, start, end, final_eps, final_knee_point, action_repeat, batch_size, replay_start_size, gamma, max_iteration, max_frames, target_update, learning_rate, t1, t2
     env.reset()
     state = env.get_state()
     tol_reward = 0
@@ -430,13 +432,14 @@ def single_episode():
     
 def all_episodes(trial):
     
+    global batch_size, startpoint, start, learning_rate, gamma
     batch_size = trial.suggest_int('batch_size', 32, 128)
     startpoint = trial.suggest_int('startpoint', 0, 100000)
     start = trial.suggest_float('start', 0, 1.5)
     learning_rate = trial.suggest_float('learning_rate', 0.0000625, 0.0001)
     gamma = trial.suggest_float('gamma', 0.5, 2)
     for episode in range(5000):
-        print(episode)
+        # print(episode)
         tol_reward = single_episode()
     tracker_dict["minibatch_updates_counter"] = 1
     tracker_dict["actions_counter"] = 1
