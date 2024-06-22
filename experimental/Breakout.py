@@ -13,7 +13,7 @@ import optuna
 # hyperparameters
 num_target_update = 0 # base: 0
 current_step = 0 # base: 0
-startpoint = 50000 # base: 50000
+startpoint = 45110 # base: 50000
 endpoint = 1000000 # base: 1000000
 kneepoint = 1000000 # base: 1000000
 start = .5 # base: 1
@@ -21,13 +21,13 @@ end = .1 # base: 0.1
 final_eps = 0.01 # base: 0.01
 final_knee_point = 22000000 # base: 22000000
 action_repeat = 4 # base: 4
-batch_size = 32 # base: 32
+batch_size = 98 # base: 32
 replay_start_size = 50000 # base: 50000
-gamma = 1 # base: 1
+gamma = 1.083866187107 # base: 1
 max_iteration = 500000 # base: 500000
 max_frames = 22000000 # base: 22000000
 target_update = 2500 # base:  2500
-learning_rate=0.0000625 # base: 0.0000625
+learning_rate=0.00007079052026859987 # base: 0.0000625
 
 Eco_Experience = namedtuple(
     'Eco_Experience',
@@ -315,7 +315,7 @@ def plot(values, moving_avg_period):
     plt.plot(values)
     moving_avg = get_moving_average(moving_avg_period, values)
     plt.plot(moving_avg)
-    print("Episode", len(values), "\n",moving_avg_period, "episode moving avg:", moving_avg[-1])
+    # print("Episode", len(values), "\n",moving_avg_period, "episode moving avg:", moving_avg[-1])
     plt.pause(0.0005)
     return moving_avg[-1]
 
@@ -425,22 +425,27 @@ def single_episode():
             tracker_dict["rewards_hist"].append(tol_reward)
             tracker_dict["rewards_hist_update_axis"].append(tracker_dict["actions_counter"])
             tracker_dict["running_reward"] = plot(tracker_dict["rewards_hist"], 100)
-            return tol_reward
+            return tol_reward.item()
             # break
             
 
-    
-def all_episodes(trial):
-    
+trialCount = 0
+def all_episodes(trial=None):
     global batch_size, startpoint, start, learning_rate, gamma
-    batch_size = trial.suggest_int('batch_size', 32, 128)
-    startpoint = trial.suggest_int('startpoint', 0, 100000)
-    start = trial.suggest_float('start', 0, 1.5)
-    learning_rate = trial.suggest_float('learning_rate', 0.0000625, 0.0001)
-    gamma = trial.suggest_float('gamma', 0.5, 2)
-    for episode in range(5000):
+    if(trial is not None):
+        batch_size = trial.suggest_int('batch_size', 32, 128)
+        startpoint = trial.suggest_int('startpoint', 0, 100)
+        start = trial.suggest_float('start', 0, 1)
+        learning_rate = trial.suggest_float('learning_rate', 0.0000625, 0.0001)
+        gamma = trial.suggest_float('gamma', 0.75, 1)
+    tol_reward = None
+    for episode in range(100):
         # print(episode)
-        tol_reward = single_episode()
+        if(tol_reward is None):
+            tol_reward = single_episode()
+        else:
+            tol_reward = tol_reward *.9 + single_episode() * 0.1
+        print("episode = ", episode, "reward = ", tol_reward)
     tracker_dict["minibatch_updates_counter"] = 1
     tracker_dict["actions_counter"] = 1
     tracker_dict["running_reward"] = 0
@@ -452,16 +457,22 @@ def all_episodes(trial):
     tracker_dict["eval_reward_list"] = []
     tracker_dict["best_frame_for_gif"] = []
     tracker_dict["best_reward"] = 0
+    plt.figure()
+    plt.plot(tracker_dict["rewards_hist"])
+    plt.title("reward")
+    plt.xlabel("episodes")
+    plt.savefig("trial" + str(trialCount) + ".jpg")
+    trialCount += 1
     return tol_reward
-study = optuna.create_study(storage="sqlite:///db.sqlite3", direction='maximize')
-study.optimize(all_episodes, n_trials=100)
-print(study.best_params)
+tune = True
+if tune:
+    study = optuna.create_study(storage="sqlite:///db1.sqlite3", direction='maximize')
+    study.optimize(all_episodes, n_trials=100)
+    print(study.best_params)
+else:
+    all_episodes()
 env.env.close_video_recorder()
 env.close()
-plt.figure()
-plt.plot(tracker_dict["rewards_hist"])
-plt.title("reward")
-plt.xlabel("episodes")
-plt.savefig("loss.jpg")
+
 with open("tracker_dict.txt", "w") as file:
     file.write(str(tracker_dict["eval_model_list_txt"]))
