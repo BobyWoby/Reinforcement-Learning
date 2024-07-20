@@ -11,23 +11,41 @@ import torchvision.transforms as T
 import optuna
 
 # hyperparameters
+# num_target_update = 0 # base: 0
+# current_step = 0 # base: 0
+# startpoint = 50000 # base: 50000
+# endpoint = 1000000 # base: 1000000
+# kneepoint = 1000000 # base: 1000000
+# start = 1	 # base: 1
+# end = .1 # base: 0.1
+# final_eps = 0.01 # base: 0.01
+# final_knee_point = 22000000 # base: 22000000
+# action_repeat = 4 # base: 4
+# batch_size = 32 # base: 32
+# replay_start_size = 50000 # base: 50000
+# gamma = 1 # base: 1
+# max_iteration = 500000 # base: 500000
+# max_frames = 22000000 # base: 22000000
+# target_update = 2500 # base:  2500
+# learning_rate=0.0000625 # base: 0.0000625
+
 num_target_update = 0 # base: 0
 current_step = 0 # base: 0
-startpoint = 45110 # base: 50000
+startpoint = 2 # base: 50000
 endpoint = 1000000 # base: 1000000
 kneepoint = 1000000 # base: 1000000
-start = .5 # base: 1
+start = 0.14712368077870006	 # base: 1
 end = .1 # base: 0.1
 final_eps = 0.01 # base: 0.01
 final_knee_point = 22000000 # base: 22000000
 action_repeat = 4 # base: 4
-batch_size = 98 # base: 32
+batch_size = 84 # base: 32
 replay_start_size = 50000 # base: 50000
-gamma = 1.083866187107 # base: 1
+gamma = 0.9529810958690669 # base: 1
 max_iteration = 500000 # base: 500000
 max_frames = 22000000 # base: 22000000
 target_update = 2500 # base:  2500
-learning_rate=0.00007079052026859987 # base: 0.0000625
+learning_rate=0.0000665660642462102 # base: 0.0000625
 
 Eco_Experience = namedtuple(
     'Eco_Experience',
@@ -289,7 +307,7 @@ def get_moving_average(period, values):
     else:
         moving_avg = torch.zeros(len(values))
         return moving_avg.numpy()
-
+moving_avg = []
 def plot(values, moving_avg_period):
     """
     test: plot(np.random.rand(300), 100)
@@ -297,6 +315,7 @@ def plot(values, moving_avg_period):
     :param moving_avg_period:
     :return: None
     """
+    global moving_avg
         # breakpoint()
     # Convert values to tensor if it's not already a tensor
     if not isinstance(values, torch.Tensor):
@@ -431,7 +450,17 @@ def single_episode():
 
 trialCount = 0
 def all_episodes(trial=None):
-    global batch_size, startpoint, start, learning_rate, gamma
+    global batch_size, startpoint, start, learning_rate, gamma, trialCount, policy_net, target_net, memory, optimizer, criterion
+    
+    memory = ReplayMemory(1000000)
+    policy_net = DQN(num_classes = env.env.action_space.n).to(device)
+    target_net = DQN(num_classes = env.env.action_space.n).to(device)
+
+    target_net.load_state_dict(policy_net.state_dict())
+    target_net.eval()
+    optimizer = optim.Adam(policy_net.parameters(), lr=learning_rate)
+    criterion = torch.nn.SmoothL1Loss()
+    # tracker_dict.cpu()
     if(trial is not None):
         batch_size = trial.suggest_int('batch_size', 32, 128)
         startpoint = trial.suggest_int('startpoint', 0, 100)
@@ -439,13 +468,23 @@ def all_episodes(trial=None):
         learning_rate = trial.suggest_float('learning_rate', 0.0000625, 0.0001)
         gamma = trial.suggest_float('gamma', 0.75, 1)
     tol_reward = None
-    for episode in range(100):
+    for episode in range(5000):
         # print(episode)
         if(tol_reward is None):
             tol_reward = single_episode()
         else:
-            tol_reward = tol_reward *.9 + single_episode() * 0.1
+            tol_reward = tol_reward *.999 + single_episode() * 0.001
         print("episode = ", episode, "reward = ", tol_reward)
+    
+    plt.figure()
+    plt.ylim(0, 350)
+    plt.plot(torch.tensor(tracker_dict["rewards_hist"]).cpu())
+    plt.plot(moving_avg)
+    plt.title("reward")
+    plt.xlabel("episodes")
+    plt.savefig("optuna val " + str(trialCount) + ".jpg")
+    print("final moving average: " + str(moving_avg[-1]))
+    trialCount += 1
     tracker_dict["minibatch_updates_counter"] = 1
     tracker_dict["actions_counter"] = 1
     tracker_dict["running_reward"] = 0
@@ -457,16 +496,12 @@ def all_episodes(trial=None):
     tracker_dict["eval_reward_list"] = []
     tracker_dict["best_frame_for_gif"] = []
     tracker_dict["best_reward"] = 0
-    plt.figure()
-    plt.plot(tracker_dict["rewards_hist"])
-    plt.title("reward")
-    plt.xlabel("episodes")
-    plt.savefig("trial" + str(trialCount) + ".jpg")
-    trialCount += 1
     return tol_reward
-tune = True
+
+
+tune = False
 if tune:
-    study = optuna.create_study(storage="sqlite:///db1.sqlite3", direction='maximize')
+    study = optuna.create_study(storage="sqlite:///db1.sqlite3", direction='maximize', study_name="hyperparams0", load_if_exists=True)
     study.optimize(all_episodes, n_trials=100)
     print(study.best_params)
 else:
