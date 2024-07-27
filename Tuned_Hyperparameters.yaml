@@ -1,0 +1,16 @@
+---
+  startpoint: 2
+  endpoint: 1000000
+  kneepoint: 1000000
+  start: 0.14712368077870006
+  end: .1
+  final_eps: 0.01
+  final_knee_point: 22000000
+  action_repeat: 4
+  batch_size: 84
+  replay_start_size: 50000
+  gamma: 0.9529810958690669
+  max_iteration: 500000
+  max_frames: 22000000
+  target_update: 2500
+  learning_rate: 0.0000665660642462102

@@ -9,43 +9,51 @@ import torch.nn as nn
 import torch.optim as optim 
 import torchvision.transforms as T
 import optuna
+import yaml
+import argparse
+import csv
 
-# hyperparameters
-# num_target_update = 0 # base: 0
-# current_step = 0 # base: 0
-# startpoint = 50000 # base: 50000
-# endpoint = 1000000 # base: 1000000
-# kneepoint = 1000000 # base: 1000000
-# start = 1	 # base: 1
-# end = .1 # base: 0.1
-# final_eps = 0.01 # base: 0.01
-# final_knee_point = 22000000 # base: 22000000
-# action_repeat = 4 # base: 4
-# batch_size = 32 # base: 32
-# replay_start_size = 50000 # base: 50000
-# gamma = 1 # base: 1
-# max_iteration = 500000 # base: 500000
-# max_frames = 22000000 # base: 22000000
-# target_update = 2500 # base:  2500
-# learning_rate=0.0000625 # base: 0.0000625
+parser = argparse.ArgumentParser()
+
+parser.add_argument("-c", "--config", required=True, help="configuration file for hyperparameters")
+parser.add_argument("-t", "--tune", type=bool, default=False, help="Whether or not to tune the hyperparameters")
+args = vars(parser.parse_args())
+
+try:
+    with open(args["config"]) as f:
+        global config
+        try:
+            config = yaml.load(f, Loader=yaml.FullLoader)  
+        except:
+            print("Non-valid file detected, using LitTraining.yaml as default")
+            with open("LitTraining.yaml") as f1:
+                config = yaml.load(f1, Loader=yaml.FullLoader)
+except:
+    print("Non-valid file detected, using LitTraining.yaml as default")
+    with open("LitTraining.yaml") as f1:
+                config = yaml.load(f1, Loader=yaml.FullLoader)
 
 num_target_update = 0 # base: 0
 current_step = 0 # base: 0
-startpoint = 2 # base: 50000
-endpoint = 1000000 # base: 1000000
-kneepoint = 1000000 # base: 1000000
-start = 0.14712368077870006	 # base: 1
-end = .1 # base: 0.1
-final_eps = 0.01 # base: 0.01
-final_knee_point = 22000000 # base: 22000000
-action_repeat = 4 # base: 4
-batch_size = 84 # base: 32
-replay_start_size = 50000 # base: 50000
-gamma = 0.9529810958690669 # base: 1
-max_iteration = 500000 # base: 500000
-max_frames = 22000000 # base: 22000000
-target_update = 2500 # base:  2500
-learning_rate=0.0000665660642462102 # base: 0.0000625
+
+# hyperparameters
+
+startpoint = config["startpoint"] # base: 50000
+endpoint = config["endpoint"] # base: 1000000
+kneepoint = config["kneepoint"] # base: 1000000
+start = config["start"]	 # base: 1
+end = config["end"] # base: 0.1
+final_eps = config["final_eps"] # base: 0.01
+final_knee_point = config["final_knee_point"] # base: 22000000
+action_repeat = config["action_repeat"] # base: 4
+batch_size = config["batch_size"] # base: 32
+replay_start_size = config["replay_start_size"] # base: 50000
+gamma = config["gamma"] # base: 1
+max_iteration = config["max_iteration"] # base: 500000
+max_frames = config["max_frames"] # base: 22000000
+target_update = config["target_update"] # base:  2500
+learning_rate= config["learning_rate"] # base: 0.0000625
+
 
 Eco_Experience = namedtuple(
     'Eco_Experience',
@@ -482,6 +490,9 @@ def all_episodes(trial=None):
     
     plt.figure()
     plt.ylim(0, 350)
+    with open("Tuned.csv", "w") as file:
+        writer = csv.writer(file)
+        writer.writerows(tracker_dict["rewards_hist"])
     plt.plot(torch.tensor(tracker_dict["rewards_hist"]).cpu())
     plt.plot(moving_avg)
     plt.title("reward")
@@ -503,8 +514,7 @@ def all_episodes(trial=None):
     return tol_reward
 
 
-tune = False
-if tune:
+if args["tune"]:
     study = optuna.create_study(storage="sqlite:///db1.sqlite3", direction='maximize', study_name="hyperparams0", load_if_exists=True)
     study.optimize(all_episodes, n_trials=100)
     print(study.best_params)
