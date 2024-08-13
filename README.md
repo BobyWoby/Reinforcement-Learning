@@ -26,7 +26,6 @@ pip install -r requirements.txt
 ## Replicating Data
 
 If you want to replicate the experiments in the paper, utilize either `LitTraining.yaml` (parameters used in an implementation of the work by Mnih et al.)  or `Tuned_Hyperparameters.yaml` (parameters found by hyperparameter optimization with Optuna in this work). For Optuna hyperparameter tuning, 100 trials were conducted on 5000 episodes per trial.
-[COMMANDS HERE]
 ```
 # Run the following command to run the values used in the implementation
 python Breakout.py -c ./LitTraining.yaml
