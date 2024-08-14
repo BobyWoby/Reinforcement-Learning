@@ -1,9 +1,8 @@
--f https://download.pytorch.org/whl/cu118/torch_stable.html
-torchvision==0.19.0
 IPython==8.26.0
-torch==2.4.0
 matplotlib==3.9.1
 numpy==2.0.1
 gymnasium==0.29.1
+gymnasium[accept-rom-license]
+gymnasium[atari]
 optuna==3.6.1
 pyYAML==6.0.1
