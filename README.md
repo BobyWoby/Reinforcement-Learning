@@ -14,7 +14,9 @@ Please see our full paper here (link coming soon).
 This project uses Python version 3.11, and the other package versions are in the `requirements.txt`.
 
 ### Dependencies
-Note that pytorch must be installed with CUDA enabled for this project to run properly. The installation instructions for pytorch can be found [here](https://pytorch.org/get-started/locally/).
+Note that pytorch must be installed with CUDA 11.8 enabled for this project to run properly. The installation instructions for pytorch can be found [here](https://pytorch.org/get-started/locally/).
+
+Make sure that the dependencies are installed with administrator priveleges to avoid a permissions conflict.
 ```
 # If you are using conda, and want to create a conda environment run this command:
 conda env create -f environment.yaml python=3.11

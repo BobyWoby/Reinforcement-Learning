@@ -448,7 +448,7 @@ def single_episode():
                 print("exploration rate = ", get_exploration_rate(current_step))
                 print("=" * 50)
             if(tracker_dict["minibatch_updates_counter"] % 20000 == 0):
-                torch.save(policy_net.state_dict(), "policy_net.pth")
+                # torch.save(policy_net.state_dict(), "policy_net.pth")
                 tracker_dict["eval_model_list_txt"].append("policy_net.pth")
             
         if env.done:
@@ -490,9 +490,6 @@ def all_episodes(trial=None):
     
     plt.figure()
     plt.ylim(0, 350)
-    with open("Tuned.csv", "w") as file:
-        writer = csv.writer(file)
-        writer.writerows(tracker_dict["rewards_hist"])
     plt.plot(torch.tensor(tracker_dict["rewards_hist"]).cpu())
     plt.plot(moving_avg)
     plt.title("reward")
@@ -522,6 +519,3 @@ else:
     all_episodes()
 env.env.close_video_recorder()
 env.close()
-
-with open("tracker_dict.txt", "w") as file:
-    file.write(str(tracker_dict["eval_model_list_txt"]))
