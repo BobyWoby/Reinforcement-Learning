@@ -3,7 +3,7 @@
 ## Overview
 This is the corresponding GitHub page for a case study done on hyperparameter optimization for deep reinforcement learning using Atari Breakout as a study environment. We aimed to figure out the performance benefits of hyperparameter optimization in the case of a Deep Q-Learning (DQN) based reinforcement learning algorithm. We provide code for model training and hyperparameter tuning in this GitHub repository.
 
-Please see our full paper [here](https://github.com/BobyWoby/Reinforcement-Learning.git).
+Please see our full paper [here](https://doi.org/10.58445/rars.1635).
 
 ## Table of Contents
 1. [Setup](#setup)
